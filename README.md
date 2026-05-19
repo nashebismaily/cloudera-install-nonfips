@@ -1,15 +1,17 @@
-# Cloudera Manager 7.13.2 + CFM 4.12 Non-FIPS Install Kit
+# Cloudera Non-FIPS Install Automation
 
-This is the non-FIPS install kit for deploying Cloudera Manager, PostgreSQL, Cloudera Flow Management, NiFi, and NiFi Registry on RHEL 9.x.
+This repository contains non-FIPS installation automation for a Cloudera environment on RHEL 9.x.
 
-The install can be run one script at a time, or with the wrapper scripts:
+It installs and prepares the core platform components needed for a Cloudera deployment, including:
 
-```bash
-./RUN_MANAGER
-./RUN_AGENT
-```
+- Cloudera Manager
+- Cloudera Manager Agent
+- PostgreSQL 14
+- Java runtime setup
+- Cloudera parcel repository configuration
+- Optional Cloudera Flow Management setup support for NiFi and NiFi Registry
 
-The wrapper scripts are the preferred path because they load `EXPORTS`, run the steps in order, and stop on the first failure.
+This is the **non-FIPS** repository. Keep this separate from the FIPS install repository.
 
 ---
 
@@ -18,23 +20,30 @@ The wrapper scripts are the preferred path because they load `EXPORTS`, run the 
 Default target:
 
 ```text
-RHEL:        9.x
-Architecture: x86_64
-CM:          7.13.2.0
-CFM:         4.12.0.1 / build -8
-PostgreSQL: 14
-Manager JVM: Java 17
-Agent JVMs:  Java 17 and Java 21
-Agent default JVM: Java 17
+Operating System:     RHEL 9.x
+Architecture:         x86_64
+Cloudera Manager:     7.13.2.0
+PostgreSQL:           14
+Manager Java:         Java 17
+Agent Java:           Java 17 and Java 21
+Agent default Java:   Java 17
+Optional CFM:         4.12.0.1 build -8
 ```
 
-Important: this is the **non-FIPS** kit. Do not use the FIPS kit scripts here. The FIPS kit was only used as a formatting and structure reference.
+Important Java behavior:
+
+```text
+Manager nodes install Java 17.
+Agent nodes install Java 17 and Java 21.
+Agent nodes keep Java 17 as the default runtime.
+Java 21 remains installed and available for services that require it.
+```
 
 ---
 
-## Directory Layout
+## Repository Layout
 
-```bash
+```text
 00_check_connectivity.sh
 01_bootstrap_repos.sh
 02_install_common_packages.sh
@@ -50,15 +59,17 @@ Important: this is the **non-FIPS** kit. Do not use the FIPS kit scripts here. T
 12_start_cm_services.sh
 13_install_cfm_csds.sh
 14_validate_ready_state.sh
+
 EXPORTS
 RUN_MANAGER
 RUN_AGENT
 AGENT
-Install Notes
+
 nifi_reg_config
-nifitls.rtf
 lib/common.sh
 ```
+
+The old standalone `Install Notes` and `nifitls.rtf` files are no longer required. The important information from those notes is now included in this README.
 
 ---
 
@@ -66,23 +77,34 @@ lib/common.sh
 
 Edit `EXPORTS` first.
 
-Required values:
+At minimum, set your Cloudera archive credentials:
 
 ```bash
 export CLOUDERA_REPO_USER='your_cloudera_username'
 export CLOUDERA_REPO_PASS='your_cloudera_password'
 ```
 
-For multi-node installs, also set:
+For multi-node installs, set the manager hostname:
 
 ```bash
 export MANAGER_HOST='manager-private-dns-or-fqdn'
+```
+
+Set the network CIDR that should be allowed to connect to PostgreSQL:
+
+```bash
 export ALLOWED_CIDR='10.0.0.0/20'
 ```
 
-On the manager node, `MANAGER_HOST` can be left blank and `RUN_MANAGER` will configure the local agent with `localhost`. For real agent nodes, `MANAGER_HOST` must be the actual private DNS name or FQDN of the manager host.
+Review and change the default database passwords:
 
-Load the exports manually when running individual scripts:
+```bash
+export CM_DB_PASS='ClouderaCM_2026'
+export RM_DB_PASS='Rman_DB_2026'
+export REG_DB_PASS='Registry_DB_2026'
+```
+
+Load the exports before running individual scripts:
 
 ```bash
 source ./EXPORTS
@@ -94,11 +116,13 @@ When using `sudo`, preserve the environment:
 sudo -E bash script_name.sh
 ```
 
+The wrapper scripts already source `EXPORTS` for you.
+
 ---
 
-## Important Version Detail for CFM 4.12
+## Important Version Detail for Optional CFM 4.12
 
-The repo directory and the parcel build name are different.
+The CFM repository version and parcel build name are not the same thing.
 
 Use this in `EXPORTS`:
 
@@ -106,13 +130,13 @@ Use this in `EXPORTS`:
 export CFM_VERSION='4.12.0.1'
 ```
 
-Do **not** use this for `CFM_VERSION`:
+Do not set `CFM_VERSION` to this:
 
 ```bash
 export CFM_VERSION='4.12.0.1-8'
 ```
 
-The `-8` belongs in the CSD jar names and parcel directory name:
+The `-8` build suffix belongs in the CSD jar names and parcel directory name:
 
 ```bash
 export CFM_NIFI_CSD_JAR='NIFI-2.6.0.4.12.0.1-8.jar'
@@ -120,7 +144,7 @@ export CFM_NIFIREGISTRY_CSD_JAR='NIFIREGISTRY-2.6.0.4.12.0.1-8.jar'
 export CFM_PARCEL_DIR_NAME='CFM-4.12.0.1-8'
 ```
 
-The CFM parcel repo URL printed by the wrapper is:
+The CFM parcel repository URL is:
 
 ```bash
 https://archive.cloudera.com/p/cfm4/4.12.0.1/redhat9/yum/tars/parcel/
@@ -130,6 +154,8 @@ https://archive.cloudera.com/p/cfm4/4.12.0.1/redhat9/yum/tars/parcel/
 
 ## Manager Node Install
 
+Run this on the Cloudera Manager and PostgreSQL server node.
+
 Preferred method:
 
 ```bash
@@ -137,7 +163,7 @@ source ./EXPORTS
 ./RUN_MANAGER
 ```
 
-The manager wrapper runs:
+`RUN_MANAGER` executes the manager-side install flow in this order:
 
 ```bash
 sudo -E bash 00_check_connectivity.sh
@@ -157,7 +183,7 @@ sudo -E bash 13_install_cfm_csds.sh
 sudo -E bash 14_validate_ready_state.sh
 ```
 
-After `RUN_MANAGER` completes, open Cloudera Manager:
+After the manager install completes, open Cloudera Manager:
 
 ```text
 http://<manager-host>:7180
@@ -169,17 +195,13 @@ Default login:
 admin / admin
 ```
 
-Then add the CFM parcel repository in Cloudera Manager:
-
-```bash
-$CFM_PARCEL_REPO_URL
-```
-
 ---
 
-## Agent / NiFi Node Install
+## Agent Node Install
 
-Edit `EXPORTS` and set the real manager hostname:
+Run this on each agent node, including NiFi and NiFi Registry nodes.
+
+Edit `EXPORTS` and set:
 
 ```bash
 export MANAGER_HOST='manager-private-dns-or-fqdn'
@@ -192,7 +214,7 @@ source ./EXPORTS
 ./RUN_AGENT
 ```
 
-The agent wrapper runs:
+`RUN_AGENT` executes the agent-side install flow in this order:
 
 ```bash
 sudo -E bash 00_check_connectivity.sh
@@ -210,16 +232,60 @@ Agent Java behavior:
 
 ```text
 Installs Java 17
-Installs Java 17 and Java 21
+Installs Java 21
 Sets Java 17 as the default runtime
 Validates both Java versions
 ```
 
-This is intentional. Agent/NiFi nodes need Java 17 as the default runtime while still having Java 21 installed and available for services that require it.
+This is intentional. Java 17 remains the default for the host and Cloudera agent behavior, while Java 21 is available for services that need a newer runtime.
 
 ---
 
-## PostgreSQL Layout
+## Manual Script Execution
+
+If you do not want to use the wrapper scripts, run the scripts manually.
+
+Manager node:
+
+```bash
+source ./EXPORTS
+
+sudo -E bash 00_check_connectivity.sh
+sudo -E bash 01_bootstrap_repos.sh
+sudo -E bash 02_install_common_packages.sh
+sudo -E bash 03_configure_os.sh
+sudo -E bash 04_install_role_runtime.sh manager
+sudo -E bash 05_install_postgres.sh
+sudo -E bash 06_configure_postgres_networking.sh
+sudo -E bash 07_create_cm_and_registry_dbs.sh
+sudo -E bash 08_add_cloudera_repos.sh
+sudo -E bash 09_install_cm_packages.sh manager
+sudo -E bash 10_configure_cm_agent.sh localhost
+sudo -E bash 11_prepare_cm_database.sh
+sudo -E bash 12_start_cm_services.sh
+sudo -E bash 13_install_cfm_csds.sh
+sudo -E bash 14_validate_ready_state.sh
+```
+
+Agent node:
+
+```bash
+source ./EXPORTS
+
+sudo -E bash 00_check_connectivity.sh
+sudo -E bash 01_bootstrap_repos.sh
+sudo -E bash 02_install_common_packages.sh
+sudo -E bash 03_configure_os.sh
+sudo -E bash 04_install_role_runtime.sh agent
+sudo -E bash 08_add_cloudera_repos.sh
+sudo -E bash 09_install_cm_packages.sh agent
+sudo -E bash 10_configure_cm_agent.sh <manager-private-dns-or-fqdn>
+sudo -E bash 14_validate_ready_state.sh
+```
+
+---
+
+## PostgreSQL Configuration
 
 Default PostgreSQL data directory:
 
@@ -229,110 +295,346 @@ Default PostgreSQL data directory:
 
 Make sure `/data` is mounted before running the manager install.
 
-Quick checks:
+Recommended checks before running PostgreSQL setup:
 
 ```bash
 lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
+df -h /data
+```
+
+PostgreSQL service checks:
+
+```bash
 sudo systemctl status postgresql-14 --no-pager
 ss -plnt | grep 5432
 sudo -u postgres psql -c "SELECT version();"
 ```
 
----
-
-## Databases Created
-
-The database script creates these by default:
-
-```text
-scm      / scm
-rman     / rman
-nifireg  / nifireg
-```
-
-Passwords come from `EXPORTS`:
+Database values from `EXPORTS`:
 
 ```bash
-CM_DB_PASS
-RM_DB_PASS
-REG_DB_PASS
+export CM_DB_NAME='scm'
+export CM_DB_USER='scm'
+
+export RM_DB_NAME='rman'
+export RM_DB_USER='rman'
+
+export REG_DB_NAME='nifireg'
+export REG_DB_USER='nifireg'
 ```
 
-NiFi Registry uses the `nifireg` database. Registry creates its own schema on first start after the JDBC settings are configured in Cloudera Manager.
+The Registry database is created because NiFi Registry needs its own backing database.
 
 ---
 
-## NiFi Registry Database Settings in Cloudera Manager
+## Cloudera Manager Post-Install Steps
 
-Use the values from `EXPORTS` when configuring NiFi Registry:
+After `RUN_MANAGER` completes and Cloudera Manager is available, log in at:
+
+```text
+http://<manager-host>:7180
+```
+
+Default credentials:
+
+```text
+admin / admin
+```
+
+Then complete the cluster wizard.
+
+If using CFM, add the CFM parcel repository:
+
+```bash
+https://archive.cloudera.com/p/cfm4/4.12.0.1/redhat9/yum/tars/parcel/
+```
+
+In Cloudera Manager, this is added under:
+
+```text
+Hosts > Parcels > Configuration > Remote Parcel Repository URLs
+```
+
+After adding the repository:
+
+```text
+Check for New Parcels
+Download CFM
+Distribute CFM
+Activate CFM
+```
+
+---
+
+## Optional NiFi Service Configuration
+
+If deploying NiFi, set the custom Java home in Cloudera Manager.
+
+Recommended Java home for NiFi:
+
+```bash
+/usr/lib/jvm/java-21-openjdk
+```
+
+Depending on the installed RPM build, the full path may look like:
+
+```bash
+/usr/lib/jvm/java-21-openjdk-21.0.10.0.7-1.el9.x86_64
+```
+
+Use the path that exists on the agent node.
+
+Check Java paths with:
+
+```bash
+ls -ld /usr/lib/jvm/java-*openjdk*
+```
+
+Set this in the NiFi service configuration:
+
+```text
+Custom Java Home: /usr/lib/jvm/java-21-openjdk
+```
+
+Use the exact installed Java 21 path if Cloudera Manager does not resolve the generic symlink.
+
+---
+
+## Optional NiFi Registry Database Configuration
+
+If deploying NiFi Registry, configure the Registry database in Cloudera Manager.
+
+Use the values from `EXPORTS`.
+
+Example:
 
 ```text
 Database Type: PostgreSQL
-Database Host: <manager-host>
-Database Port: 5432
-Database Name: nifireg
-Database User: nifireg
-Database Password: Registry_DB_2026
+JDBC URL: jdbc:postgresql://<postgres-host>:5432/nifireg
+Database Driver Class: org.postgresql.Driver
+Database Driver Location: /opt/cloudera/parcels/CFM-4.12.0.1-8/REGISTRY/jdbc-drivers/postgresql-42.5.5.jar
+Database Username: nifireg
+Database Password: <REG_DB_PASS from EXPORTS>
+Validation Query: SELECT 1
+SSL: Disabled
 ```
 
-Make sure PostgreSQL allows the agent subnet through `ALLOWED_CIDR`.
+If PostgreSQL is on the manager host, use the manager host private IP or private DNS name in the JDBC URL.
+
+Example:
+
+```text
+jdbc:postgresql://10.0.7.147:5432/nifireg
+```
 
 ---
 
-## Manual TLS Notes
+## Optional NiFi TLS / HTTPS Configuration
 
-This package includes the prior TLS notes in:
+These are the NiFi properties that were used to get the HTTPS deployment working.
 
-```bash
-nifitls.rtf
+Use hostnames that match your certificate subject/SAN values.
+
+Example NiFi HTTPS settings:
+
+```properties
+nifi.web.https.host=<nifi-hostname>
+nifi.web.https.port=8443
+
+nifi.security.keystore=/opt/cloudera/security/keystore.p12
+nifi.security.keystoreType=PKCS12
+nifi.security.keystorePasswd=<your_password>
+nifi.security.keyPasswd=<your_password>
+
+nifi.security.truststore=/opt/cloudera/security/truststore.jks
+nifi.security.truststoreType=JKS
+nifi.security.truststorePasswd=<your_password>
 ```
 
-Those are notes only. They are not automatically executed by `RUN_MANAGER` or `RUN_AGENT`.
+For a demo or bootstrap environment without LDAP, anonymous bootstrap auth was used:
+
+```properties
+nifi.security.allow.anonymous.authentication=true
+nifi.initial.admin.identity=anonymous
+```
+
+For node identity generation:
+
+```properties
+nifi.autogen.node.identities=true
+nifi.autogen.node.identities.dn.prefix=CN=
+nifi.autogen.node.identities.dn.suffix=
+```
+
+Important: leave the suffix blank.
+
+The suffix was originally set to:
+
+```text
+, OU=NIFI
+```
+
+That caused an identity collision in the working environment. The final working state had the suffix blank.
+
+After major NiFi auth changes, these files were regenerated:
+
+```bash
+sudo rm -f /var/lib/nifi/users.xml
+sudo rm -f /var/lib/nifi/authorizations.xml
+```
+
+Restart NiFi after changing auth or TLS settings.
+
+---
+
+## Optional NiFi Registry TLS / HTTPS Configuration
+
+Example NiFi Registry HTTPS settings:
+
+```properties
+nifi.registry.web.https.host=<registry-hostname>
+nifi.registry.web.https.port=18443
+
+nifi.registry.security.keystore=/opt/cloudera/security/keystore.p12
+nifi.registry.security.keystoreType=PKCS12
+nifi.registry.security.keystorePasswd=<password>
+nifi.registry.security.keyPasswd=<password>
+
+nifi.registry.security.truststore=/opt/cloudera/security/truststore.jks
+nifi.registry.security.truststoreType=JKS
+nifi.registry.security.truststorePasswd=<password>
+
+nifi.registry.security.needClientAuth=false
+nifi.registry.security.initial.admin.identity=anonymous
+```
+
+Use hostnames that match the certificate SANs.
+
+---
+
+## Trusting the Demo Root CA
+
+If using a local or demo CA, import the root CA into the Java truststore used by Cloudera components.
+
+Example:
+
+```bash
+sudo keytool -importcert \
+  -alias cloudera-rootca \
+  -file /opt/cloudera/security/rootCA.crt \
+  -keystore /usr/lib/jvm/java/lib/security/cacerts \
+  -storepass changeit \
+  -noprompt
+```
+
+Depending on the installed Java layout, the truststore may live under the specific Java home.
+
+Check with:
+
+```bash
+readlink -f /usr/lib/jvm/java
+ls -l /usr/lib/jvm/java/lib/security/cacerts
+```
+
+If Java 17 is the default, confirm:
+
+```bash
+java -version
+readlink -f "$(which java)"
+```
 
 ---
 
 ## Common Validation Commands
 
+Check OS:
+
 ```bash
-sudo -E bash 14_validate_ready_state.sh
+cat /etc/redhat-release
+uname -m
+```
+
+Check Java:
+
+```bash
 java -version
+alternatives --display java
 ls -ld /usr/lib/jvm/java-*openjdk*
-systemctl status cloudera-scm-server --no-pager
-systemctl status cloudera-scm-agent --no-pager
-systemctl status postgresql-14 --no-pager
-ss -plnt | egrep '5432|7180|7182|9443|18443'
-dnf repolist | grep -i cloudera
+```
+
+Check Cloudera Manager server:
+
+```bash
+sudo systemctl status cloudera-scm-server --no-pager
+sudo tail -f /var/log/cloudera-scm-server/cloudera-scm-server.log
+```
+
+Check Cloudera Manager agent:
+
+```bash
+sudo systemctl status cloudera-scm-agent --no-pager
+sudo tail -f /var/log/cloudera-scm-agent/cloudera-scm-agent.log
+```
+
+Check PostgreSQL:
+
+```bash
+sudo systemctl status postgresql-14 --no-pager
+ss -plnt | grep 5432
+sudo -u postgres psql -c "\l"
+```
+
+Check parcel directory:
+
+```bash
+ls -l /opt/cloudera/parcels
+```
+
+Check CSD directory:
+
+```bash
+ls -l /opt/cloudera/csd
 ```
 
 ---
 
-## Troubleshooting Notes
+## Logs
 
-If the Cloudera repo fails, confirm credentials and access:
-
-```bash
-source ./EXPORTS
-curl -I -L -u "$CLOUDERA_REPO_USER:$CLOUDERA_REPO_PASS" "$CM_REPO_BASE_URL"
-```
-
-If CFM CSD download fails, confirm the CFM URL:
+Bootstrap logs are written to:
 
 ```bash
-curl -I -L -u "$CLOUDERA_REPO_USER:$CLOUDERA_REPO_PASS" "$CFM_PARCEL_REPO_URL"
+/var/log/cloudera-bootstrap
 ```
 
-If an agent does not heartbeat, confirm the manager hostname:
+Useful Cloudera logs:
 
 ```bash
-grep '^server_host=' /etc/cloudera-scm-agent/config.ini
-nc -vz "$MANAGER_HOST" 7182
-systemctl status cloudera-scm-agent --no-pager
+/var/log/cloudera-scm-server/cloudera-scm-server.log
+/var/log/cloudera-scm-agent/cloudera-scm-agent.log
+/var/log/cloudera-scm-agent/certmanager.log
 ```
 
-If PostgreSQL connection fails from an agent node:
+Useful NiFi logs:
 
 ```bash
-nc -vz <manager-host> 5432
-sudo -u postgres psql -c "SHOW listen_addresses;"
-sudo tail -50 /data/postgres14/pg_hba.conf
+/var/log/nifi/nifi-app.log
+/var/log/nifi/nifi-bootstrap.log
+/var/log/nifi/nifi-user.log
 ```
+
+Useful NiFi Registry logs:
+
+```bash
+/var/log/nifiregistry/nifi-registry-app.log
+/var/log/nifiregistry/nifi-registry-bootstrap.log
+```
+
+---
+
+## Notes
+
+This repository is intentionally non-FIPS.
+
+For FIPS installs, use the separate FIPS repository.
+
+Do not mix the non-FIPS and FIPS scripts. The FIPS path requires additional crypto modules, Java provider configuration, and service-specific FIPS settings that are not part of this repository.
