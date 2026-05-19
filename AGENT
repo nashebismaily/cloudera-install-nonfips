@@ -1,0 +1,14 @@
+# Agent node quick start
+
+Edit EXPORTS first and set:
+
+  CLOUDERA_REPO_USER
+  CLOUDERA_REPO_PASS
+  MANAGER_HOST
+
+Then run:
+
+  source ./EXPORTS
+  ./RUN_AGENT
+
+RUN_AGENT installs both Java 17 and Java 21 on agent nodes, installs the Cloudera Manager agent package, points it to MANAGER_HOST, and validates the node.

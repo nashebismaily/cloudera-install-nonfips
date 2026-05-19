@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Cloudera Manager + CFM non-FIPS install configuration
+# Target default: RHEL 9.x, CM 7.13.2, CFM 4.12, PostgreSQL 14
+# ==============================================================================
+
+# ---- Cloudera archive credentials ----
+# Required for protected Cloudera archive downloads.
+export CLOUDERA_REPO_USER=''
+export CLOUDERA_REPO_PASS=''
+
+# ---- Host roles / networking ----
+# Set MANAGER_HOST to the FQDN or private DNS name of the Cloudera Manager host.
+# On the manager itself, localhost is acceptable for local agent registration.
+# Agent nodes must use the real manager hostname, not localhost.
+export MANAGER_HOST=''
+export AGENT_HOST=''
+export ALLOWED_CIDR='10.0.0.0/20'
+
+# ---- Platform guardrails ----
+export EXPECTED_RHEL_MAJOR='9'
+export REQUIRE_X86_64='true'
+
+# ---- Java ----
+# Manager nodes install Java 17.
+# Agent/NiFi nodes install both Java 17 and Java 21, with Java 17 as the default runtime.
+export JAVA_MANAGER_MAJOR='17'
+export JAVA_AGENT_PRIMARY_MAJOR='17'
+export JAVA_AGENT_EXTRA_MAJORS='21'
+export JAVA_MANAGER_HOME_TARGET='/usr/lib/jvm/java-17-openjdk'
+export JAVA_AGENT_HOME_TARGET='/usr/lib/jvm/java-17-openjdk'
+
+# ---- PostgreSQL ----
+export PG_MAJOR='14'
+export PGDATA_DIR='/data/postgres14'
+export DB_HOST='localhost'
+export DB_PORT='5432'
+
+# ---- Databases ----
+export CM_DB_NAME='scm'
+export CM_DB_USER='scm'
+export CM_DB_PASS='ClouderaCM_2026'
+
+export RM_DB_NAME='rman'
+export RM_DB_USER='rman'
+export RM_DB_PASS='Rman_DB_2026'
+
+export REG_DB_NAME='nifireg'
+export REG_DB_USER='nifireg'
+export REG_DB_PASS='Registry_DB_2026'
+
+# Optional databases for common CDP services. Leave CREATE_EXTRA_DBS=false unless needed.
+export CREATE_EXTRA_DBS='false'
+export HUE_DB_NAME='hue'
+export HUE_DB_USER='hue'
+export HUE_DB_PASS='Hue_DB_2026'
+export HIVE_DB_NAME='metastore'
+export HIVE_DB_USER='hive'
+export HIVE_DB_PASS='Hive_DB_2026'
+export RANGER_DB_NAME='ranger'
+export RANGER_DB_USER='rangeradmin'
+export RANGER_DB_PASS='Ranger_DB_2026'
+
+# ---- External repo behavior ----
+export ALLOW_EXTERNAL='true'
+export ENABLE_PGDG='true'
+export ENABLE_EPEL='false'
+export DISABLE_FIREWALLD='true'
+export DISABLE_SELINUX='false'
+
+# ---- Cloudera Manager ----
+export CM_VERSION='7.13.2.0'
+export CM_MAJOR_REPO='cm7'
+export CM_OS_REPO='redhat9'
+export CM_REPO_BASE_URL="https://archive.cloudera.com/p/${CM_MAJOR_REPO}/${CM_VERSION}/${CM_OS_REPO}/yum/"
+
+# ---- CFM ----
+# Important: CFM_VERSION is the repository directory and should not include the parcel build suffix.
+# The -8 build suffix belongs in the jar and activated parcel names below.
+export CFM_STREAM='cfm4'
+export CFM_VERSION='4.12.0.1'
+export CFM_OS_REPO='redhat9'
+export CFM_PARCEL_REPO_URL="https://archive.cloudera.com/p/${CFM_STREAM}/${CFM_VERSION}/${CFM_OS_REPO}/yum/tars/parcel/"
+export CFM_NIFI_CSD_JAR='NIFI-2.6.0.4.12.0.1-8.jar'
+export CFM_NIFIREGISTRY_CSD_JAR='NIFIREGISTRY-2.6.0.4.12.0.1-8.jar'
+export CFM_PARCEL_DIR_NAME='CFM-4.12.0.1-8'
+export CFM_PARCEL_ROOT="/opt/cloudera/parcels/${CFM_PARCEL_DIR_NAME}"
+
+# ---- Logging ----
+export LOG_DIR='/var/log/cloudera-bootstrap'

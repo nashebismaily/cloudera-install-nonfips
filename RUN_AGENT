@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Run this on each agent / NiFi / NiFi Registry node.
+# Edit EXPORTS first, especially credentials and MANAGER_HOST.
+
+set -euo pipefail
+cd "$(dirname "$0")"
+source ./EXPORTS
+
+run_step() {
+  local desc="$1"
+  shift
+  echo
+  echo "========================================================================"
+  echo "Running: ${desc}"
+  echo "Command: $*"
+  echo "========================================================================"
+  "$@"
+}
+
+if [[ -z "${MANAGER_HOST:-}" ]]; then
+  echo "[ERROR] MANAGER_HOST must be set in EXPORTS before running RUN_AGENT. Use the manager private DNS name or FQDN."
+  exit 1
+fi
+
+if [[ -z "${CLOUDERA_REPO_USER:-}" || -z "${CLOUDERA_REPO_PASS:-}" ]]; then
+  echo "[ERROR] Set CLOUDERA_REPO_USER and CLOUDERA_REPO_PASS in EXPORTS before running RUN_AGENT."
+  exit 1
+fi
+
+run_step "preflight connectivity" sudo -E bash 00_check_connectivity.sh
+run_step "bootstrap OS repositories" sudo -E bash 01_bootstrap_repos.sh
+run_step "install common packages" sudo -E bash 02_install_common_packages.sh
+run_step "configure operating system" sudo -E bash 03_configure_os.sh
+run_step "install agent runtime Java 17 and Java 21" sudo -E bash 04_install_role_runtime.sh agent
+run_step "add Cloudera Manager repos" sudo -E bash 08_add_cloudera_repos.sh
+run_step "install Cloudera Manager agent packages" sudo -E bash 09_install_cm_packages.sh agent
+run_step "configure Cloudera Manager agent" sudo -E bash 10_configure_cm_agent.sh "${MANAGER_HOST}"
+run_step "validate ready state" sudo -E bash 14_validate_ready_state.sh
+
+echo
+echo "[OK] RUN_AGENT complete."
+echo "This node has both Java ${JAVA_AGENT_PRIMARY_MAJOR:-17} and Java ${JAVA_AGENT_EXTRA_MAJORS:-21} installed. Java ${JAVA_AGENT_PRIMARY_MAJOR:-17} is the default runtime."
