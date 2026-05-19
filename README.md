@@ -721,7 +721,7 @@ nifi.registry.security.truststoreType=PKCS12
 
 ## 15. Auto-TLS approach
 
-This kit can support an Auto-TLS utility workflow under:
+This kit includes an Auto-TLS utility workflow under:
 
 ```bash
 utilities/tls
@@ -729,9 +729,11 @@ utilities/tls
 
 The top-level install scripts handle the operating system, Java runtime, PostgreSQL, Cloudera Manager, agents, CSDs, parcels, and base service installation.
 
-The `utilities/tls` directory, if present, should be treated as a separate post-install utility area for enabling Cloudera Manager Auto-TLS after the manager and agent hosts are installed and visible in Cloudera Manager.
+The `utilities/tls` directory is a separate post-install utility area for enabling Cloudera Manager Auto-TLS after the manager and agent hosts are installed and visible in Cloudera Manager.
 
-Use the top-level README for the platform install. Use `utilities/tls/README.md` when you are ready to enable Auto-TLS.
+Use this top-level README for the platform install. Use `utilities/tls/README.md` when you are ready to enable Auto-TLS.
+
+Do not run Auto-TLS before the CM agents are installed and communicating with the CM server.
 
 ### When to run Auto-TLS
 
@@ -745,9 +747,120 @@ Run Auto-TLS only after:
 6. Passwordless SSH works from the manager host to every cluster host using the configured Auto-TLS SSH user.
 7. The hostnames in `utilities/tls/hosts.csv` match the hostnames used by Cloudera Manager.
 
-Do not run Auto-TLS before the CM agents are installed and communicating with the CM server.
+### Auto-TLS utility files
 
-### Typical Auto-TLS sequence
+The Auto-TLS utilities are in:
+
+```bash
+cd /root/cloudera-install-nonfips/utilities/tls
+```
+
+Important files:
+
+| File | Purpose |
+|---|---|
+| `README.md` | Detailed Auto-TLS utility instructions |
+| `tls.env` | Local runtime configuration for the Auto-TLS scripts |
+| `tls.env.example` | Example configuration template |
+| `hosts.csv` | Host inventory used to generate certificates and payload entries |
+| `hosts.csv.example` | Example host inventory |
+| `00_prepare_dirs.sh` | Creates the Auto-TLS artifact directories |
+| `01_generate_keys_csrs.sh` | Generates host private keys and CSRs |
+| `02_create_demo_ca.sh` | Creates the local CA used by the demo/local CA flow |
+| `03_sign_csrs_with_demo_ca.sh` | Signs the host CSRs using the demo/local CA |
+| `04_build_pkcs12_stores.sh` | Builds PKCS12 keystores and truststores for validation/use |
+| `05_validate_autotls_prereqs.sh` | Validates CM API access, DNS, SSH, filesystem paths, and artifacts |
+| `06_validate_artifacts.sh` | Validates certificates, keys, SANs, and stores |
+| `07_enable_autotls.sh` | Calls the Cloudera Manager `generateCmca` API |
+
+`tls.env` and `hosts.csv` are local runtime files. They should normally not be committed with customer-specific hostnames, credentials, passwords, private keys, or certificate material. Commit the `.example` files instead.
+
+### Configure Auto-TLS utilities
+
+On the manager host:
+
+```bash
+sudo -i
+cd /root/cloudera-install-nonfips/utilities/tls
+
+cp tls.env.example tls.env
+cp hosts.csv.example hosts.csv
+
+vi tls.env
+vi hosts.csv
+```
+
+Example `hosts.csv` for a two-host manager plus agent environment:
+
+```csv
+host_id,ip_sans,dns_sans
+ip-10-0-3-31.us-east-2.compute.internal,10.0.3.31,ip-10-0-3-31.us-east-2.compute.internal
+ip-10-0-11-156.us-east-2.compute.internal,10.0.11.156,ip-10-0-11-156.us-east-2.compute.internal
+```
+
+The `host_id` must match the hostname Cloudera Manager knows for that host. The Cloudera Manager host must be included.
+
+Example `tls.env` values:
+
+```bash
+export AUTO_TLS_LOCATION="/opt/cloudera/AutoTLS"
+export AUTO_TLS_WORKDIR="${AUTO_TLS_LOCATION}/artifacts"
+
+export CM_HOST="ip-10-0-3-31.us-east-2.compute.internal"
+export CM_PORT="7180"
+export CM_API_VERSION="v41"
+export CM_USER="admin"
+export CM_PASSWORD="admin"
+
+export AUTO_TLS_SSH_USER="autotls"
+export AUTO_TLS_SSH_PORT="22"
+export AUTO_TLS_SSH_KEY_FILE="/home/autotls/.ssh/id_rsa"
+```
+
+The `autotls` user should have passwordless SSH from the manager host to every managed host and passwordless sudo on each host:
+
+```bash
+autotls ALL=(ALL) NOPASSWD:ALL
+```
+
+### Host private key mode
+
+The Auto-TLS utilities support both encrypted and unencrypted host private keys.
+
+For customer/live environments, use encrypted host keys:
+
+```bash
+export AUTO_TLS_ENCRYPT_HOST_KEYS="true"
+export AUTO_TLS_HOST_KEY_PASSWORD="ChangeMe12345"
+```
+
+In this mode:
+
+- `01_generate_keys_csrs.sh` generates encrypted PEM host private keys.
+- `07_enable_autotls.sh` validates those encrypted keys.
+- `07_enable_autotls.sh` creates the per-host password files Cert Manager expects:
+
+```text
+/opt/cloudera/AutoTLS/hosts-key-store/<hostname>/cm-auto-host_key.pw
+```
+
+For lab or temporary testing only, unencrypted host keys can be used:
+
+```bash
+export AUTO_TLS_ENCRYPT_HOST_KEYS="false"
+```
+
+In this mode:
+
+- `01_generate_keys_csrs.sh` generates unencrypted PEM host private keys.
+- `04_build_pkcs12_stores.sh` and `06_validate_artifacts.sh` do not use a private-key passphrase.
+- `07_enable_autotls.sh` removes stale per-host password files before submitting the Auto-TLS command.
+
+For customer work, encrypted mode is preferred.
+
+### Demo/local CA execution sequence
+
+Use this sequence when the utility scripts are creating and signing certificates with the local demo CA.
 
 On the manager host:
 
@@ -756,6 +869,11 @@ sudo -i
 cd /root/cloudera-install-nonfips/utilities/tls
 
 source ./tls.env
+
+rm -rf /opt/cloudera/AutoTLS/artifacts
+rm -rf /opt/cloudera/AutoTLS/hosts-key-store
+rm -rf /opt/cloudera/AutoTLS/trust-store
+rm -rf /opt/cloudera/AutoTLS/private
 
 ./00_prepare_dirs.sh
 ./01_generate_keys_csrs.sh
@@ -766,6 +884,128 @@ source ./tls.env
 ./05_validate_autotls_prereqs.sh
 ./07_enable_autotls.sh
 ```
+
+The order intentionally runs `06_validate_artifacts.sh` before `05_validate_autotls_prereqs.sh` so the prerequisite script can confirm the expected artifacts are already present.
+
+### Real CA workflow
+
+For a real customer CA, do not use the demo CA signing step.
+
+Run only the preparation and CSR generation steps:
+
+```bash
+sudo -i
+cd /root/cloudera-install-nonfips/utilities/tls
+
+source ./tls.env
+
+./00_prepare_dirs.sh
+./01_generate_keys_csrs.sh
+```
+
+Send the generated CSRs to the customer CA team:
+
+```text
+/opt/cloudera/AutoTLS/artifacts/csrs/<host_id>-csr.pem
+```
+
+Place the returned host certificates here:
+
+```text
+/opt/cloudera/AutoTLS/artifacts/certs/<host_id>-cert.pem
+```
+
+Place the CA chain here:
+
+```text
+/opt/cloudera/AutoTLS/artifacts/ca/ca-chain.pem
+```
+
+Then continue with:
+
+```bash
+./04_build_pkcs12_stores.sh
+./06_validate_artifacts.sh
+./05_validate_autotls_prereqs.sh
+./07_enable_autotls.sh
+```
+
+### What `05_validate_autotls_prereqs.sh` checks
+
+The prerequisite script validates:
+
+- Required local commands are present.
+- `tls.env` contains required variables.
+- Password values meet the script requirements.
+- `hosts.csv` exists and has at least one host.
+- Each host resolves through local DNS or `/etc/hosts`.
+- The Cloudera Manager API responds on `http://<CM_HOST>:7180/api/<version>/cm/version`.
+- CM credentials are valid.
+- Passwordless SSH works to every host using `AUTO_TLS_SSH_USER` and `AUTO_TLS_SSH_KEY_FILE`.
+- `/opt/cloudera/AutoTLS` is readable and writable by `cloudera-scm`.
+- CA, host certificate, and host key artifacts exist.
+
+Do not run `07_enable_autotls.sh` until `05_validate_autotls_prereqs.sh` and `06_validate_artifacts.sh` both pass.
+
+### What `07_enable_autotls.sh` does
+
+`07_enable_autotls.sh` builds a payload for:
+
+```text
+http://<CM_HOST>:7180/api/<CM_API_VERSION>/cm/commands/generateCmca
+```
+
+The payload includes:
+
+- Auto-TLS location
+- CA certificate path
+- CM host certificate path
+- CM host private key path
+- host certificate/key entries for every host
+- keystore and truststore password file paths
+- SSH user and SSH private key for host access
+- `configureAllServices=true` when configured
+
+For encrypted host private keys, `07_enable_autotls.sh` also writes:
+
+```text
+/opt/cloudera/AutoTLS/hosts-key-store/<hostname>/cm-auto-host_key.pw
+```
+
+This is required because Cloudera Cert Manager uses those files when converting encrypted host private keys into the Auto-TLS keystore format.
+
+If Cert Manager logs show this error:
+
+```text
+No password file found for host ... cm-auto-host_key.pw
+Assuming default in-cluster password
+unable to load private key
+bad decrypt
+```
+
+then the per-host password file is missing or the password does not match the encrypted host private key.
+
+### Auto-TLS outputs
+
+The utilities create artifacts under:
+
+```text
+/opt/cloudera/AutoTLS/artifacts
+```
+
+Common outputs:
+
+```text
+/opt/cloudera/AutoTLS/artifacts/keys/<host_id>-key.pem
+/opt/cloudera/AutoTLS/artifacts/csrs/<host_id>-csr.pem
+/opt/cloudera/AutoTLS/artifacts/certs/<host_id>-cert.pem
+/opt/cloudera/AutoTLS/artifacts/fullchains/<host_id>-fullchain.pem
+/opt/cloudera/AutoTLS/artifacts/stores/<host_id>-keystore.p12
+/opt/cloudera/AutoTLS/artifacts/stores/<host_id>-truststore.p12
+/opt/cloudera/AutoTLS/artifacts/payload/generate_cmca_payload.json
+```
+
+### After `07_enable_autotls.sh` succeeds
 
 After the API call succeeds, watch the logs:
 
@@ -792,9 +1032,45 @@ Then restart the CM agent on every host:
 systemctl restart cloudera-scm-agent
 ```
 
+From the manager host, you can restart a remote agent with:
+
+```bash
+ssh -i /home/autotls/.ssh/id_rsa autotls@<agent-host> "sudo systemctl restart cloudera-scm-agent"
+```
+
 Finally, restart Cloudera Management Service and the cluster services from the Cloudera Manager UI.
 
----
+### Post Auto-TLS notes for NiFi and NiFi Registry
+
+After Auto-TLS, NiFi and NiFi Registry use the keystores and truststores produced by Cloudera Manager.
+
+For NiFi Registry, if the service fails with a KeyManagerFactory or TrustManagerFactory error, check the effective process configuration first:
+
+```bash
+grep -i 'keymanager\|trustmanager\|keystoreType\|truststoreType' \
+  /var/run/cloudera-scm-agent/process/*-NIFI_REGISTRY-*/nifi-registry.properties 2>/dev/null
+```
+
+If needed, set:
+
+```properties
+nifi.registry.security.keymanager.algorithm=PKIX
+nifi.registry.security.trustmanager.algorithm=PKIX
+```
+
+Also verify the keystore and truststore type values match the actual stores:
+
+```properties
+nifi.registry.security.keystoreType=JKS
+nifi.registry.security.truststoreType=JKS
+```
+
+or:
+
+```properties
+nifi.registry.security.keystoreType=PKCS12
+nifi.registry.security.truststoreType=PKCS12
+```
 
 ## 16. Common validation commands
 
