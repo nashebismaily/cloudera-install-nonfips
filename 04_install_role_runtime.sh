@@ -27,6 +27,36 @@ install_java_major() {
   install_pkg "java-${major}-openjdk-devel"
 }
 
+install_nifi_python_runtime() {
+  if [[ "${INSTALL_NIFI_PYTHON:-true}" != "true" ]]; then
+    echo "[INFO] INSTALL_NIFI_PYTHON is not true; skipping Python 3.11 install"
+    return 0
+  fi
+
+  echo "==== Installing Python 3.11 for NiFi Python processors ===="
+  install_pkg "python3.11"
+  install_pkg "python3.11-pip"
+
+  echo "==== Validating Python runtimes ===="
+  if [[ ! -x /usr/bin/python3 && -x /usr/bin/python3.9 ]]; then
+    ln -sf /usr/bin/python3.9 /usr/bin/python3
+  fi
+
+  if [[ -x /usr/bin/python3 ]]; then
+    echo "System Python for CM agent: $(/usr/bin/python3 --version 2>&1)"
+  else
+    echo "[ERROR] /usr/bin/python3 is missing. On RHEL 9 this should be Python 3.9."
+    exit 1
+  fi
+
+  if [[ -x /usr/bin/python3.11 ]]; then
+    echo "NiFi Python runtime: $(/usr/bin/python3.11 --version 2>&1)"
+  else
+    echo "[ERROR] /usr/bin/python3.11 was not installed successfully."
+    exit 1
+  fi
+}
+
 if [[ "$ROLE" == "manager" ]]; then
   MANAGER_JAVA="${JAVA_MANAGER_MAJOR:-17}"
   echo "==== Installing manager Java runtime ===="
@@ -55,6 +85,8 @@ if [[ "$ROLE" == "agent" ]]; then
   AGENT_JAVA_HOME="${JAVA_AGENT_HOME_TARGET:-$(java_home_for_major "$PRIMARY_JAVA")}"
   set_default_java_home "$AGENT_JAVA_HOME"
   validate_java_major "$PRIMARY_JAVA" "${AGENT_JAVA_HOME}/bin/java"
+
+  install_nifi_python_runtime
 fi
 
 if [[ ${#FAILED_PACKAGES[@]} -gt 0 ]]; then
@@ -66,4 +98,11 @@ echo "==== Java summary ===="
 java -version || true
 alternatives --display java || true
 ls -ld /usr/lib/jvm/java-*openjdk* 2>/dev/null || true
+
+echo
+echo "==== Python summary ===="
+/usr/bin/python3 --version 2>/dev/null || true
+/usr/bin/python3.11 --version 2>/dev/null || true
+ls -l /usr/bin/python3 /usr/bin/python3.9 /usr/bin/python3.11 2>/dev/null || true
+
 echo "Log file: $LOG_FILE"

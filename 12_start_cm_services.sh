@@ -24,12 +24,27 @@ fi
 echo "==== Reloading systemd ===="
 systemctl daemon-reload
 
+echo "==== Ensuring CM agent Python uses RHEL 9 system Python ===="
+if [[ ! -x /usr/bin/python3 && -x /usr/bin/python3.9 ]]; then
+  ln -sf /usr/bin/python3.9 /usr/bin/python3
+fi
+if [[ -x /usr/bin/python3 && -e /opt/cloudera/cm-agent/bin/python ]]; then
+  ln -sf /usr/bin/python3 /opt/cloudera/cm-agent/bin/python
+  chown -h root:root /opt/cloudera/cm-agent/bin/python
+fi
+/usr/bin/python3 --version 2>/dev/null || true
+/opt/cloudera/cm-agent/bin/python --version 2>/dev/null || true
+
 echo "==== Enabling services ===="
 systemctl enable cloudera-scm-server
+systemctl enable cloudera-scm-supervisord || true
 systemctl enable cloudera-scm-agent
 
 echo "==== Starting Cloudera Manager Server ===="
 systemctl restart cloudera-scm-server
+
+echo "==== Starting Cloudera Manager supervisord ===="
+systemctl restart cloudera-scm-supervisord || true
 
 echo "==== Starting Cloudera Manager Agent ===="
 systemctl restart cloudera-scm-agent
@@ -58,6 +73,7 @@ echo
 echo "==== Service Validation ===="
 
 systemctl status cloudera-scm-server --no-pager || true
+systemctl status cloudera-scm-supervisord --no-pager || true
 systemctl status cloudera-scm-agent --no-pager || true
 
 echo

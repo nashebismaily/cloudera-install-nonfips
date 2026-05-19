@@ -10,6 +10,9 @@ The current profile is:
 - PostgreSQL 14
 - Java 17 as the default Java runtime
 - Java 21 installed on agent hosts for services that require it
+- Python 3.9 as the system and CM Agent Python on RHEL 9
+- Python 3.11 installed on agent/NiFi hosts for NiFi Python processors, but not set as the default
+- Psycopg2 2.9.5 or newer for PostgreSQL-backed Hue compatibility
 - Optional CFM 4.12.0.1 support for NiFi and NiFi Registry
 
 This kit is for the non-FIPS path only. Keep it separate from the FIPS install repository.
@@ -132,6 +135,28 @@ Agent installs Java 17 and Java 21.
 Agent default Java remains Java 17.
 Java 21 is available for services that require it.
 ```
+
+Python defaults:
+
+```bash
+export CM_AGENT_PYTHON_BIN='/usr/bin/python3'
+export CM_AGENT_EXPECTED_PYTHON_MAJOR_MINOR='3.9'
+export NIFI_PYTHON_BIN='/usr/bin/python3.11'
+export INSTALL_NIFI_PYTHON='true'
+export INSTALL_PSYCOPG2='true'
+```
+
+This means:
+
+```text
+All RHEL 9 hosts keep Python 3.9 as /usr/bin/python3.
+The Cloudera Manager Agent uses /usr/bin/python3, which should resolve to Python 3.9.
+Agent/NiFi hosts also install Python 3.11 for NiFi Python processors.
+Python 3.11 is not made the system default.
+python3-psycopg2 is installed so Psycopg2 is 2.9.5 or newer for PostgreSQL-backed Hue checks.
+```
+
+Do not point `/usr/bin/python3` or `/opt/cloudera/cm-agent/bin/python` to Python 3.11 on RHEL 9.
 
 Database defaults:
 
@@ -323,6 +348,7 @@ sudo -E ./RUN_AGENT
 - Java 17
 - Java 21
 - Java 17 as the default Java runtime
+- Python 3.11 for NiFi Python processors, while Python 3.9 remains the system and CM agent Python
 - Cloudera Manager repository
 - Cloudera Manager Agent
 - local `cloudera-scm-supervisord`

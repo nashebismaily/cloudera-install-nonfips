@@ -30,6 +30,15 @@ export JAVA_AGENT_EXTRA_MAJORS='21'
 export JAVA_MANAGER_HOME_TARGET='/usr/lib/jvm/java-17-openjdk'
 export JAVA_AGENT_HOME_TARGET='/usr/lib/jvm/java-17-openjdk'
 
+# ---- Python ----
+# RHEL 9 Cloudera Manager Agent expects Python 3.9.
+# NiFi Python processors can use Python 3.11, but Python 3.11 should not become the system default.
+export CM_AGENT_PYTHON_BIN='/usr/bin/python3'
+export CM_AGENT_EXPECTED_PYTHON_MAJOR_MINOR='3.9'
+export NIFI_PYTHON_BIN='/usr/bin/python3.11'
+export INSTALL_NIFI_PYTHON='true'
+export INSTALL_PSYCOPG2='true'
+
 # ---- PostgreSQL ----
 export PG_MAJOR='14'
 export PGDATA_DIR='/data/postgres14'
